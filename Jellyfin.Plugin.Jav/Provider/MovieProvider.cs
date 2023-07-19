@@ -7,6 +7,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Web;
 using Jellyfin.Plugin.Jav.Extensions;
 using Jellyfin.Plugin.Jav.Model;
 using Jellyfin.Plugin.Jav.Service;
@@ -39,6 +40,7 @@ namespace Jellyfin.Plugin.Jav.Provider
         public async Task<IEnumerable<RemoteSearchResult>> GetSearchResults(MovieInfo searchInfo, CancellationToken cancellationToken)
         {
             var indexes = await _javService.SearchMovie(searchInfo.Name).ConfigureAwait(false) ?? new List<MovieIndex>(0);
+
             return from index in indexes
                 select new RemoteSearchResult
                 {
@@ -46,7 +48,10 @@ namespace Jellyfin.Plugin.Jav.Provider
                     SearchProviderName = Name,
                     ProductionYear = index.ReleaseDate?.Year,
                     PremiereDate = index.ReleaseDate,
-                    ImageUrl = index.CoverUrl?.ToString(),
+                    ImageUrl = index.ThumbUrl?.ToString(),
+                    ProviderIds = index.DetailPageUrl != null && !string.IsNullOrEmpty(index.DetailPageUrl.AbsoluteUri)
+                        ? new Dictionary<string, string> { { "DetailPageUrl", index.DetailPageUrl.AbsoluteUri.Contains("locale", StringComparison.Ordinal) ? index.DetailPageUrl.AbsoluteUri : index.DetailPageUrl.AbsoluteUri + "?locale=zh" }, { "Provider", index.Provider }, { "Title", index.Title }, { "Number", index.Number } }
+                        : new Dictionary<string, string>()
                 };
         }
 
@@ -55,12 +60,28 @@ namespace Jellyfin.Plugin.Jav.Provider
             var name = Path.GetFileName(info.Path);
             name = name.Contains('.', Ordinal) ? name[..name.LastIndexOf('.')] : name;
             _logger.LogInformation("GetMetadata, name={Name}", name);
+            _logger.LogInformation("GetMetadata: {@ProviderIds}", info.ProviderIds);
             var configuration = Plugin.Instance.Configuration;
             var movie = info.IsAutomated ? info.GetMovie() : null;
             if (movie == null)
             {
                 _logger.LogInformation("GetMetadata From Remote, name={Name}", name);
-                movie = await _javService.AutoSearchMovie(name).ConfigureAwait(false);
+
+                string detailPageUrl = info.ProviderIds.ContainsKey("DetailPageUrl") ? info.ProviderIds["DetailPageUrl"] : string.Empty;
+                string provider = info.ProviderIds.ContainsKey("Provider") ? info.ProviderIds["Provider"] : string.Empty;
+                string title = info.ProviderIds.ContainsKey("Title") ? info.ProviderIds["Title"] : string.Empty;
+                string number = info.ProviderIds.ContainsKey("Number") ? info.ProviderIds["Number"] : string.Empty;
+
+                if (!string.IsNullOrEmpty(detailPageUrl))
+                {
+                    string encodedUrl = HttpUtility.UrlEncode(detailPageUrl);
+                    movie = await _javService.AutoSearchMovieWithUri(number, title, encodedUrl, provider).ConfigureAwait(false);
+                }
+                else
+                {
+                    movie = await _javService.AutoSearchMovie(name).ConfigureAwait(false);
+                }
+
                 if (movie == null)
                 {
                     return new MetadataResult<Movie> { HasMetadata = false };
@@ -70,6 +91,19 @@ namespace Jellyfin.Plugin.Jav.Provider
             }
 
             var parameters = AsParameters(movie);
+
+            string[] tagsVar = new[]
+                {
+                    movie.Series ?? string.Empty,
+                    movie.Studio ?? string.Empty,
+                    movie.Label ?? string.Empty
+                }.Where(tag => !string.IsNullOrEmpty(tag)).ToArray();
+
+            string[] studioVar = new[]
+                {
+                    movie.Studio ?? string.Empty,
+                }.Where(tag => !string.IsNullOrEmpty(tag)).ToArray();
+
             var metaData = new Movie
             {
                 Name = RenderTemplate(configuration.Template.TitleTemplate, parameters, configuration.Template.PlaceholderIfNull),
@@ -82,8 +116,8 @@ namespace Jellyfin.Plugin.Jav.Provider
                     ? movie.Genres.Select(genre => configuration.Replacement.GenreReplacementTable.GetValueOrDefault(genre, genre)).ToArray()
                     : movie.Genres.ToArray(),
                 CommunityRating = (float?)movie.CommunityRating,
-                Studios = new[] { movie.Studio },
-                Tags = new[] { movie.Series, movie.Studio, movie.Label },
+                Studios = studioVar,
+                Tags = tagsVar,
                 SortName = movie.Number,
                 ForcedSortName = movie.Number,
                 ExternalId = movie.Number,

@@ -28,6 +28,9 @@ namespace Jellyfin.Plugin.Jav.Service
         public Task<Movie?> AutoSearchMovie(string keyword) =>
             HttpGet<Movie>(Uri(_backend.Server, "/movie/auto/search", new Dictionary<string, object?> { { "keyword", keyword } }));
 
+        public Task<Movie?> AutoSearchMovieWithUri(string number, string title, string uri, string provider) =>
+            HttpGet<Movie>(Uri(_backend.Server, "/movie/auto/search/uri", new Dictionary<string, object?> { { "number", number }, { "title", title }, { "uri", uri }, { "provider", provider } }));
+
         public Task<List<MovieIndex>?> SearchMovie(string keyword) =>
             HttpGet<List<MovieIndex>>(Uri(_backend.Server, "/movie/search", new Dictionary<string, object?> { { "keyword", keyword } }));
 

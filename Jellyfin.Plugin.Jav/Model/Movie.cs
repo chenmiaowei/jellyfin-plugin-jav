@@ -30,7 +30,7 @@ namespace Jellyfin.Plugin.Jav.Model
         [property: JsonPropertyName("detailPageUrl")] Uri DetailPageUrl,
         [property: JsonPropertyName("number")] string Number,
         [property: JsonPropertyName("title")] string Title,
-        [property: JsonPropertyName("coverUrl")] Uri? CoverUrl,
+        [property: JsonPropertyName("thumbUrl")] Uri? ThumbUrl,
         [property: JsonPropertyName("releaseDate")] DateTime? ReleaseDate
     );
 
