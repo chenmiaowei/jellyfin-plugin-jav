@@ -34,7 +34,7 @@ namespace Jellyfin.Plugin.Jav.Model
         [property: JsonPropertyName("releaseDate")] DateTime? ReleaseDate
     );
 
-    internal class Iso8601DurationConverter : JsonConverter<TimeSpan>
+    internal sealed class Iso8601DurationConverter : JsonConverter<TimeSpan>
     {
         public override TimeSpan Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {

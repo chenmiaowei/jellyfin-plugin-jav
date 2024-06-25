@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
+using Jellyfin.Data.Enums;
 using Jellyfin.Plugin.Jav.Extensions;
 using Jellyfin.Plugin.Jav.Model;
 using Jellyfin.Plugin.Jav.Service;
@@ -60,35 +61,67 @@ namespace Jellyfin.Plugin.Jav.Provider
             var name = Path.GetFileName(info.Path);
             name = name.Contains('.', Ordinal) ? name[..name.LastIndexOf('.')] : name;
             _logger.LogInformation("GetMetadata, name={Name}", name);
-            _logger.LogInformation("GetMetadata: {@ProviderIds}", info.ProviderIds);
+            _logger.LogInformation("GetMetadata: ProviderIds={@ProviderIds}", info.ProviderIds);
             var configuration = Plugin.Instance.Configuration;
             var movie = info.IsAutomated ? info.GetMovie() : null;
+            _logger.LogInformation("GetMetadata From Remote, name={Name}", name);
+
+            string detailPageUrl;
+            if (info.ProviderIds.TryGetValue("DetailPageUrl", out string? url))
+            {
+                detailPageUrl = url ?? string.Empty;
+            }
+            else
+            {
+                detailPageUrl = string.Empty;
+            }
+
+            string provider;
+            if (info.ProviderIds.TryGetValue("Provider", out string? provider1))
+            {
+                provider = provider1 ?? string.Empty;
+            }
+            else
+            {
+                provider = string.Empty;
+            }
+
+            string title;
+            if (info.ProviderIds.TryGetValue("Title", out string? title1))
+            {
+                title = title1 ?? string.Empty;
+            }
+            else
+            {
+                title = string.Empty;
+            }
+
+            string number;
+            if (info.ProviderIds.TryGetValue("Number", out string? number1))
+            {
+                number = number1 ?? string.Empty;
+            }
+            else
+            {
+                number = string.Empty;
+            }
+
+            if (!string.IsNullOrEmpty(detailPageUrl))
+            {
+                string encodedUrl = HttpUtility.UrlEncode(detailPageUrl);
+                movie = await _javService.AutoSearchMovieWithUri(number, title, encodedUrl, provider).ConfigureAwait(false);
+            }
+            else
+            {
+                movie = await _javService.AutoSearchMovie(name).ConfigureAwait(false);
+            }
+
             if (movie == null)
             {
-                _logger.LogInformation("GetMetadata From Remote, name={Name}", name);
-
-                string detailPageUrl = info.ProviderIds.ContainsKey("DetailPageUrl") ? info.ProviderIds["DetailPageUrl"] : string.Empty;
-                string provider = info.ProviderIds.ContainsKey("Provider") ? info.ProviderIds["Provider"] : string.Empty;
-                string title = info.ProviderIds.ContainsKey("Title") ? info.ProviderIds["Title"] : string.Empty;
-                string number = info.ProviderIds.ContainsKey("Number") ? info.ProviderIds["Number"] : string.Empty;
-
-                if (!string.IsNullOrEmpty(detailPageUrl))
-                {
-                    string encodedUrl = HttpUtility.UrlEncode(detailPageUrl);
-                    movie = await _javService.AutoSearchMovieWithUri(number, title, encodedUrl, provider).ConfigureAwait(false);
-                }
-                else
-                {
-                    movie = await _javService.AutoSearchMovie(name).ConfigureAwait(false);
-                }
-
-                if (movie == null)
-                {
-                    return new MetadataResult<Movie> { HasMetadata = false };
-                }
-
-                info.SetMovie(movie);
+                return new MetadataResult<Movie> { HasMetadata = false };
             }
+
+            info.SetMovie(movie);
 
             var parameters = AsParameters(movie);
 
@@ -137,7 +170,7 @@ namespace Jellyfin.Plugin.Jav.Provider
             var result = new MetadataResult<Movie> { HasMetadata = true, Item = metaData };
             if (movie.Director != null)
             {
-                result.AddPerson(new PersonInfo { Name = movie.Director, Type = PersonType.Director });
+                result.AddPerson(new PersonInfo { Name = movie.Director, Type = PersonKind.Director });
             }
 
             var actors = configuration.Replacement.EnableActorReplacement
@@ -146,7 +179,7 @@ namespace Jellyfin.Plugin.Jav.Provider
             var avatar = await _javService.SearchAvatarByName(actors).ConfigureAwait(false);
             foreach (var actor in actors)
             {
-                result.AddPerson(new PersonInfo { Name = actor, Type = PersonType.Actor, ImageUrl = avatar?.GetValueOrDefault(actor) });
+                result.AddPerson(new PersonInfo { Name = actor, Type = PersonKind.Actor, ImageUrl = avatar?.GetValueOrDefault(actor) });
             }
 
             return result;

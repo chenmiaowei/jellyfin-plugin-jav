@@ -48,6 +48,8 @@ public class Template
 
 public class Replacement
 {
+    private static readonly string[] LineSeparators = new[] { "\r\n", "\n", "\r" };
+
     public bool EnableGenreReplacement { get; set; }
 
     public string RawGenreReplacementTable
@@ -73,7 +75,7 @@ public class Replacement
     public Dictionary<string, string> ActorReplacementTable { get; private set; } = new(0);
 
     private static Dictionary<string, string> DecodeTable(string rawTable) =>
-        rawTable.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.None)
+        rawTable.Split(LineSeparators, StringSplitOptions.None)
             .Select(line => line.Split(":"))
             .Where(line => line.Length == 2)
             .ToDictionary(values => values[0], values => values[1]);
